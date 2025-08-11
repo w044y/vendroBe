@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from 'typeorm';
+import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from 'typeorm';
 import { Trip } from './Trip';
 import { Spot } from './Spot';
 
@@ -58,10 +58,18 @@ export class TripSpot {
     @CreateDateColumn()
     created_at!: Date; // ! When this spot was added to the trip
 
+    @Column()
+    trip_id!: string;
+
+    @Column()
+    spot_id!: string;
+
     // Relationships
     @ManyToOne(() => Trip, trip => trip.trip_spots, { onDelete: 'CASCADE' })
-    trip!: Trip; // ! Which trip this belongs to (cascade delete when trip is deleted)
+    @JoinColumn({ name: 'trip_id' })
+    trip!: Trip;
 
     @ManyToOne(() => Spot, { nullable: false })
-    spot!: Spot; // ! The actual hitchhiking spot being visited
+    @JoinColumn({ name: 'spot_id' })
+    spot!: Spot;
 }

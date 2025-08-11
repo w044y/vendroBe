@@ -14,7 +14,12 @@
     "schema:sync": "npm run typeorm -- schema:sync",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "test:db": "ts-node --files src/test-database.ts",
+    "reset:db": "ts-node --files src/complete-reset.ts",
+
+    "db:reset": "ts-node -e \"import('./src/config/database').then(m => m.AppDataSource.initialize().then(() => m.AppDataSource.dropDatabase()).then(() => m.AppDataSource.synchronize()).then(() => process.exit(0)))\"",
+    "db:sync": "ts-node -e \"import('./src/config/database').then(m => m.AppDataSource.initialize().then(() => m.AppDataSource.synchronize()).then(() => process.exit(0)))\""
   },
   "author": "",
   "license": "ISC",

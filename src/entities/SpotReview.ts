@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from 'typeorm';
+import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from 'typeorm';
 import { User } from './User';
 import { Spot } from './Spot';
 
@@ -25,10 +25,18 @@ export class SpotReview {
     @CreateDateColumn()
     created_at!: Date;
 
+    @Column()
+    user_id!: string;
+
+    @Column()
+    spot_id!: string;
+
     // Relationships
     @ManyToOne(() => User, user => user.spot_reviews)
+    @JoinColumn({ name: 'user_id' })
     user!: User;
 
     @ManyToOne(() => Spot, spot => spot.reviews)
+    @JoinColumn({ name: 'spot_id' })
     spot!: Spot;
 }

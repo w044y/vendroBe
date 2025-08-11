@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, Point } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, Point, JoinColumn } from 'typeorm';
 import { User } from './User';
 import { SpotReview } from './SpotReview';
 
@@ -29,7 +29,6 @@ export class Spot {
     @Column({ type: 'decimal', precision: 11, scale: 8 })
     longitude!: number;
 
-    // PostGIS geometry point for efficient spatial queries
     @Column({
         type: 'geography',
         spatialFeatureType: 'Point',
@@ -71,6 +70,10 @@ export class Spot {
     @Column({ default: true })
     is_active!: boolean;
 
+    // ADD THIS FOREIGN KEY COLUMN
+    @Column()
+    created_by_id!: string;
+
     @CreateDateColumn()
     created_at!: Date;
 
@@ -79,6 +82,7 @@ export class Spot {
 
     // Relationships
     @ManyToOne(() => User, user => user.created_spots)
+    @JoinColumn({ name: 'created_by_id' })
     created_by!: User;
 
     @OneToMany(() => SpotReview, review => review.spot)
