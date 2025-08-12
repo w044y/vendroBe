@@ -1,12 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { SpotService } from '../services/spotService';
 import { SpotType } from '../entities/Spot';
+import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
 const spotService = new SpotService();
 
-// GET /api/v1/spots - Get all spots with filters
+// GET /api/v1/spots - Get all spots (public)
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const limit = parseInt(req.query.limit as string) || 50;
@@ -37,28 +38,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
         res.json({
             data: spots,
-            pagination: {
-                limit,
-                offset,
-                total: spots.length
-            },
-            filters: {
-                spot_type,
-                is_verified,
-                min_rating
-            }
+            pagination: { limit, offset, total: spots.length },
+            filters: { spot_type, is_verified, min_rating }
         });
     } catch (error) {
         next(error);
     }
 });
 
-// GET /api/v1/spots/nearby - Get spots near coordinates
+// GET /api/v1/spots/nearby - Get spots near coordinates (public)
 router.get('/nearby', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const latitude = parseFloat(req.query.latitude as string);
         const longitude = parseFloat(req.query.longitude as string);
-        const radius = parseFloat(req.query.radius as string) || 10; // km
+        const radius = parseFloat(req.query.radius as string) || 10;
         const limit = parseInt(req.query.limit as string) || 20;
 
         if (!latitude || !longitude) {
@@ -90,7 +83,7 @@ router.get('/nearby', async (req: Request, res: Response, next: NextFunction) =>
     }
 });
 
-// GET /api/v1/spots/:id - Get spot by ID
+// GET /api/v1/spots/:id - Get spot by ID (public)
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const spot = await spotService.getSpotById(req.params.id);
@@ -100,8 +93,8 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     }
 });
 
-// POST /api/v1/spots - Create new spot
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+// POST /api/v1/spots - Create new spot (PROTECTED)
+router.post('/', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
             name,
@@ -111,13 +104,12 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             spot_type,
             tips,
             accessibility_info,
-            facilities,
-            created_by_id
+            facilities
         } = req.body;
 
         // Validation
-        if (!name || !description || !latitude || !longitude || !spot_type || !created_by_id) {
-            throw createError('name, description, latitude, longitude, spot_type, and created_by_id are required', 400);
+        if (!name || !description || !latitude || !longitude || !spot_type) {
+            throw createError('name, description, latitude, longitude, and spot_type are required', 400);
         }
 
         if (!Object.values(SpotType).includes(spot_type)) {
@@ -133,7 +125,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             tips,
             accessibility_info,
             facilities: facilities || [],
-            created_by_id
+            created_by_id: req.user!.userId // Use authenticated user ID
         });
 
         res.status(201).json({
@@ -145,9 +137,16 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     }
 });
 
-// PUT /api/v1/spots/:id - Update spot
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+// PUT /api/v1/spots/:id - Update spot (PROTECTED - own spots only)
+router.put('/:id', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
     try {
+        // First get the spot to check ownership
+        const existingSpot = await spotService.getSpotById(req.params.id);
+
+        if (existingSpot.created_by.id !== req.user!.userId) {
+            throw createError('You can only update spots you created', 403);
+        }
+
         const { name, description, tips, accessibility_info, facilities } = req.body;
 
         const spot = await spotService.updateSpot(req.params.id, {
@@ -167,9 +166,16 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     }
 });
 
-// DELETE /api/v1/spots/:id - Delete spot (soft delete)
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+// DELETE /api/v1/spots/:id - Delete spot (PROTECTED - own spots only)
+router.delete('/:id', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
     try {
+        // First get the spot to check ownership
+        const existingSpot = await spotService.getSpotById(req.params.id);
+
+        if (existingSpot.created_by.id !== req.user!.userId) {
+            throw createError('You can only delete spots you created', 403);
+        }
+
         const result = await spotService.deleteSpot(req.params.id);
         res.json(result);
     } catch (error) {
@@ -177,23 +183,22 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     }
 });
 
-// POST /api/v1/spots/:id/reviews - Add review to spot
-router.post('/:id/reviews', async (req: Request, res: Response, next: NextFunction) => {
+// POST /api/v1/spots/:id/reviews - Add review to spot (PROTECTED)
+router.post('/:id/reviews', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
-            user_id,
             safety_rating,
             overall_rating,
             comment,
             photos
         } = req.body;
 
-        if (!user_id || !safety_rating || !overall_rating) {
-            throw createError('user_id, safety_rating, and overall_rating are required', 400);
+        if (!safety_rating || !overall_rating) {
+            throw createError('safety_rating and overall_rating are required', 400);
         }
 
         const review = await spotService.addSpotReview(req.params.id, {
-            user_id,
+            user_id: req.user!.userId, // Use authenticated user ID
             safety_rating: parseInt(safety_rating),
             overall_rating: parseInt(overall_rating),
             comment,
