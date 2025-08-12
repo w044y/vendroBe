@@ -8,6 +8,8 @@ export const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendMagicLinkEmail = async (email: string, magicLink: string, userName?: string) => {
     try {
+        const urlParams = new URL(magicLink);
+        const token = urlParams.searchParams.get('token');
         const { data, error } = await resend.emails.send({
             from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
             to: [email],
@@ -41,6 +43,9 @@ export const sendMagicLinkEmail = async (email: string, magicLink: string, userN
             
             <p style="font-size: 14px; color: #666; margin-top: 25px;">
               If the button doesn't work, copy and paste this link into your browser:
+            </p>
+             <p style="font-size: 14px; color: #666; word-break: break-all; background: #fff; padding: 10px; border-radius: 4px; border-left: 3px solid #D4622A;">
+              ${token}
             </p>
             <p style="font-size: 14px; color: #666; word-break: break-all; background: #fff; padding: 10px; border-radius: 4px; border-left: 3px solid #D4622A;">
               ${magicLink}

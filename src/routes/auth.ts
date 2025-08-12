@@ -17,7 +17,10 @@ router.post('/magic-link', async (req: Request, res: Response, next: NextFunctio
 
         const result = await authService.sendMagicLink(email.toLowerCase().trim());
 
-        res.json(result);
+        res.json({
+            data: result,
+            message: 'Magic link sent successfully'
+        });
     } catch (error) {
         next(error);
     }
@@ -34,7 +37,10 @@ router.post('/verify', async (req: Request, res: Response, next: NextFunction) =
 
         const result = await authService.verifyMagicLink(token, email.toLowerCase().trim());
 
-        res.json(result);
+        res.json({
+            data: result,
+            message: 'Successfully authenticated'
+        });
     } catch (error) {
         next(error);
     }
@@ -52,7 +58,10 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
 
         const result = await authService.refreshToken(token);
 
-        res.json(result);
+        res.json({
+            data: result,
+            message: 'Token refreshed successfully'
+        });
     } catch (error) {
         next(error);
     }
@@ -67,7 +76,10 @@ router.get('/me', authenticateToken, async (req: Request, res: Response, next: N
 
         const user = await authService.getCurrentUser(req.user.userId);
 
-        res.json({ data: user });
+        res.json({
+            data: user,
+            message: 'User retrieved successfully'
+        });
     } catch (error) {
         next(error);
     }
@@ -85,7 +97,10 @@ router.post('/logout', authenticateToken, async (req: Request, res: Response, ne
 
         const result = await authService.logout(token);
 
-        res.json(result);
+        res.json({
+            data: result,
+            message: 'Successfully logged out'
+        });
     } catch (error) {
         next(error);
     }
