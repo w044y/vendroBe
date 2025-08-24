@@ -1,11 +1,14 @@
 import { AppDataSource } from '../config/database';
-import { Spot, SpotType } from '../entities/Spot';
+import { Spot } from '../entities/Spot';
 import { SpotReview } from '../entities/SpotReview';
 import { createError } from '../middleware/errorHandler';
+import {User} from "../entities/User";
+import {SpotType, TransportMode} from "../enum/enums";
 
 export class SpotService {
     private spotRepository = AppDataSource.getRepository(Spot);
     private reviewRepository = AppDataSource.getRepository(SpotReview);
+    private userRepository = AppDataSource.getRepository(User);
 
     async getAllSpots(filters: {
         limit?: number;
@@ -97,6 +100,10 @@ export class SpotService {
         facilities?: string[];
         created_by_id: string;
     }) {
+
+        await this.ensureDevUser();
+
+
         // Validate coordinates
         if (spotData.latitude < -90 || spotData.latitude > 90) {
             throw createError('Invalid latitude. Must be between -90 and 90', 400);
@@ -115,6 +122,31 @@ export class SpotService {
 
         return await this.spotRepository.save(spot);
     }
+
+
+    private async ensureDevUser() {
+        const DEV_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'; // Proper UUID format
+
+        const devUser = await this.userRepository.findOne({
+            where: { id: DEV_USER_ID }
+        });
+
+        if (!devUser) {
+            const newDevUser = this.userRepository.create({
+                id: DEV_USER_ID,
+                email: 'dev@vendro.app',
+                username: 'devuser',
+                display_name: 'Dev User',
+                vendro_points: 100,
+                safety_rating: 4.5,
+                is_verified: true,
+            });
+            await this.userRepository.save(newDevUser);
+            console.log('✅ Created dev user with UUID:', DEV_USER_ID);
+        }
+    }
+
+
 
     async updateSpot(id: string, updateData: {
         name?: string;
@@ -135,12 +167,156 @@ export class SpotService {
         return { message: 'Spot deleted successfully' };
     }
 
+    // NEW: Get reviews filtered by transport mode
+    async getSpotReviews(spotId: string, filters: {
+        transport_mode?: TransportMode;
+        limit?: number;
+        offset?: number;
+        sort_by?: 'newest' | 'oldest' | 'most_helpful';
+    } = {}) {
+        const { transport_mode, limit = 20, offset = 0, sort_by = 'newest' } = filters;
+
+        const queryBuilder = this.reviewRepository.createQueryBuilder('review')
+            .leftJoinAndSelect('review.user', 'user')
+            .where('review.spot_id = :spotId', { spotId })
+            .select([
+                'review',
+                'user.id',
+                'user.display_name',
+                'user.username',
+                'user.safety_rating'
+            ]);
+
+        // Filter by transport mode if specified
+        if (transport_mode) {
+            queryBuilder.andWhere('review.transport_mode = :transport_mode', { transport_mode });
+        }
+
+        // Apply sorting
+        switch (sort_by) {
+            case 'oldest':
+                queryBuilder.orderBy('review.created_at', 'ASC');
+                break;
+            case 'most_helpful':
+                queryBuilder.orderBy('review.helpful_votes', 'DESC')
+                    .addOrderBy('review.created_at', 'DESC');
+                break;
+            case 'newest':
+            default:
+                queryBuilder.orderBy('review.created_at', 'DESC');
+                break;
+        }
+
+        return await queryBuilder
+            .limit(limit)
+            .offset(offset)
+            .getMany();
+    }
+
+
+
+    private async updateSpotAggregatedRatings(spotId: string) {
+        const spot = await this.spotRepository.findOne({
+            where: {id: spotId},
+            relations: ['reviews']
+        });
+
+        if (!spot) return;
+
+        // Fix: Properly type the modeRatings object
+        const modeRatings: Record<string, {
+            safety: number;
+            effectiveness: number;
+            review_count: number;
+            avg_wait_time?: number;
+            legal_status?: number;
+            facilities?: number;
+            accessibility?: number;
+        }> = {};
+
+        const transportModes = Object.values(TransportMode);
+
+        for (const mode of transportModes) {
+            const modeReviews = spot.reviews.filter(review => review.transport_mode === mode);
+
+            if (modeReviews.length > 0) {
+                // Fix: Use string conversion to ensure proper indexing
+                modeRatings[mode as string] = {
+                    safety: this.calculateAverage(modeReviews.map(r => r.safety_rating)),
+                    effectiveness: this.calculateAverage(modeReviews.map(r => r.effectiveness_rating)),
+                    review_count: modeReviews.length,
+                };
+
+                // Add mode-specific metrics
+                if (mode === TransportMode.HITCHHIKING) {
+                    const waitTimes = modeReviews
+                        .map(r => r.wait_time_minutes)
+                        .filter(wt => wt !== null && wt !== undefined) as number[];
+                    if (waitTimes.length > 0) {
+                        modeRatings[mode as string].avg_wait_time = this.calculateAverage(waitTimes);
+                    }
+                }
+
+                if (mode === TransportMode.VAN_LIFE) {
+                    const legalStatuses = modeReviews
+                        .map(r => r.legal_status)
+                        .filter(ls => ls !== null && ls !== undefined) as number[];
+                    if (legalStatuses.length > 0) {
+                        modeRatings[mode as string].legal_status = this.calculateAverage(legalStatuses);
+                    }
+                }
+
+                if (mode === TransportMode.CYCLING || mode === TransportMode.WALKING) {
+                    const facilityRatings = modeReviews
+                        .map(r => r.facility_rating)
+                        .filter(fr => fr !== null && fr !== undefined) as number[];
+                    if (facilityRatings.length > 0) {
+                        modeRatings[mode as string].facilities = this.calculateAverage(facilityRatings);
+                    }
+
+                    const accessibilityRatings = modeReviews
+                        .map(r => r.accessibility_rating)
+                        .filter(ar => ar !== null && ar !== undefined) as number[];
+                    if (accessibilityRatings.length > 0) {
+                        modeRatings[mode as string].accessibility = this.calculateAverage(accessibilityRatings);
+                    }
+                }
+            }
+        }
+
+    }
+
+    private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371000; // Earth's radius in meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    private calculateAverage(numbers: number[]): number {
+        if (numbers.length === 0) return 0;
+        return Math.round((numbers.reduce((sum, num) => sum + num, 0) / numbers.length) * 10) / 10;
+    }
+
     async addSpotReview(spotId: string, reviewData: {
         user_id: string;
+        transport_mode: TransportMode;  // Make sure this is included
         safety_rating: number;
-        overall_rating: number;
+        effectiveness_rating: number;
+        overall_rating: number;  // Add this - it was missing
         comment?: string;
-        photos?: string[];
+        wait_time_minutes?: number;
+        legal_status?: number;
+        facility_rating?: number;
+        accessibility_rating?: number;
+        review_latitude?: number;
+        review_longitude?: number;
+        photos?: string[];  // Add this - it was missing
+        context?: any;
     }) {
         // Validate ratings
         if (reviewData.safety_rating < 1 || reviewData.safety_rating > 5) {

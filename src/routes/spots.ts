@@ -1,8 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { SpotService } from '../services/spotService';
-import { SpotType } from '../entities/Spot';
 import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
+import {SpotType, TransportMode} from "../enum/enums";
+
 
 const router = Router();
 const spotService = new SpotService();
@@ -94,7 +95,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /api/v1/spots - Create new spot (PROTECTED)
-router.post('/', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
             name,
@@ -125,7 +126,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response, next: Ne
             tips,
             accessibility_info,
             facilities: facilities || [],
-            created_by_id: req.user!.userId // Use authenticated user ID
+            created_by_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'// Use authenticated user ID
         });
 
         res.status(201).json({
@@ -183,31 +184,113 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response, nex
     }
 });
 
-// POST /api/v1/spots/:id/reviews - Add review to spot (PROTECTED)
-router.post('/:id/reviews', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:id/reviews', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
+            transport_mode,
             safety_rating,
+            effectiveness_rating,
             overall_rating,
             comment,
-            photos
+            wait_time_minutes,
+            legal_status,
+            facility_rating,
+            accessibility_rating,
+            review_latitude,
+            review_longitude,
+            photos,
+            context
         } = req.body;
 
-        if (!safety_rating || !overall_rating) {
-            throw createError('safety_rating and overall_rating are required', 400);
+        // Validation
+        if (!transport_mode || !safety_rating || !effectiveness_rating || !overall_rating) {
+            throw createError('transport_mode, safety_rating, effectiveness_rating, and overall_rating are required', 400);
+        }
+
+        if (!Object.values(TransportMode).includes(transport_mode)) {
+            throw createError(`Invalid transport_mode. Valid modes: ${Object.values(TransportMode).join(', ')}`, 400);
+        }
+
+        if (safety_rating < 1 || safety_rating > 5 || effectiveness_rating < 1 || effectiveness_rating > 5 || overall_rating < 1 || overall_rating > 5) {
+            throw createError('Ratings must be between 1 and 5', 400);
         }
 
         const review = await spotService.addSpotReview(req.params.id, {
-            user_id: req.user!.userId, // Use authenticated user ID
+            user_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', // Use dev user for now
+            transport_mode,
             safety_rating: parseInt(safety_rating),
+            effectiveness_rating: parseInt(effectiveness_rating),
             overall_rating: parseInt(overall_rating),
             comment,
-            photos: photos || []
+            wait_time_minutes: wait_time_minutes ? parseInt(wait_time_minutes) : undefined,
+            legal_status: legal_status ? parseInt(legal_status) : undefined,
+            facility_rating: facility_rating ? parseInt(facility_rating) : undefined,
+            accessibility_rating: accessibility_rating ? parseInt(accessibility_rating) : undefined,
+            review_latitude: review_latitude ? parseFloat(review_latitude) : undefined,
+            review_longitude: review_longitude ? parseFloat(review_longitude) : undefined,
+            photos: photos || [],
+            context: context || null
         });
 
         res.status(201).json({
             data: review,
             message: 'Review added successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/:id/reviews', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { transport_mode, limit, offset, sort_by } = req.query;
+
+        const filters: any = {};
+
+        if (transport_mode) {
+            if (!Object.values(TransportMode).includes(transport_mode as TransportMode)) {
+                throw createError(`Invalid transport_mode. Valid modes: ${Object.values(TransportMode).join(', ')}`, 400);
+            }
+            filters.transport_mode = transport_mode as TransportMode;
+        }
+
+        if (limit) filters.limit = parseInt(limit as string);
+        if (offset) filters.offset = parseInt(offset as string);
+        if (sort_by) filters.sort_by = sort_by as 'newest' | 'oldest' | 'most_helpful';
+
+        const reviews = await spotService.getSpotReviews(req.params.id, filters);
+
+        res.json({
+            data: reviews,
+            message: 'Reviews retrieved successfully',
+            filters_applied: filters
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// GET /api/v1/spots/:id/reviews/summary - Get aggregated review summary
+router.get('/:id/reviews/summary', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const spot = await spotService.getSpotById(req.params.id);
+
+        if (!spot) {
+            throw createError('Spot not found', 404);
+        }
+
+        const summary = {
+            total_reviews: spot.total_reviews,
+            overall_safety_rating: spot.safety_rating,
+            overall_rating: spot.overall_rating,
+            last_reviewed: spot.last_reviewed,
+            mode_ratings: spot.mode_ratings || {},
+            transport_modes_available: spot.transport_modes || []
+        };
+
+        res.json({
+            data: summary,
+            message: 'Review summary retrieved successfully'
         });
     } catch (error) {
         next(error);
