@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { UserService } from '../services/userService';
+import { UserService } from '@/services/userService';
 import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { UserProfileService } from '../services/userProfileService';

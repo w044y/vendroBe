@@ -26,18 +26,12 @@ export class UserService {
 
         return user;
     }
-
     async getUserByEmail(email: string) {
         return await this.userRepository.findOne({
             where: { email },
             select: ['id', 'email', 'username', 'display_name', 'profile_photo_url', 'vendro_points', 'safety_rating', 'is_verified']
         });
     }
-
-    async getUserProfile(id: string) {
-        return await this.
-    }
-
     async createUser(userData: {
         email: string;
         username?: string;
