@@ -4,11 +4,13 @@ import { SpotReview } from '../entities/SpotReview';
 import { createError } from '../middleware/errorHandler';
 import {User} from "../entities/User";
 import {SpotType, TransportMode} from "../enum/enums";
+import {UserProfileService} from "@/services/userProfileService";
 
 export class SpotService {
     private spotRepository = AppDataSource.getRepository(Spot);
     private reviewRepository = AppDataSource.getRepository(SpotReview);
     private userRepository = AppDataSource.getRepository(User);
+    private userProfileService = new UserProfileService(); // Add this
 
     async getAllSpots(filters: {
         limit?: number;
@@ -364,4 +366,157 @@ export class SpotService {
             safety_rating: parseFloat(avgRatings.avgSafety) || 0
         });
     }
+
+    async getSpotsFiltered(filters: {
+        transportModes?: TransportMode[];
+        userId?: string; // Optional: filter based on user's profile
+        latitude?: number;
+        longitude?: number;
+        radius?: number;
+        limit?: number;
+        offset?: number;
+        spotType?: SpotType;
+        minRating?: number;
+        safetyPriority?: 'high' | 'medium' | 'low';
+    } = {}) {
+        const {
+            transportModes,
+            userId,
+            latitude,
+            longitude,
+            radius = 10,
+            limit = 50,
+            offset = 0,
+            spotType,
+            minRating,
+            safetyPriority
+        } = filters;
+
+        let effectiveTransportModes: TransportMode[] = [];
+
+        // Determine which transport modes to filter by
+        if (transportModes) {
+            // Explicit transport modes provided
+            effectiveTransportModes = transportModes;
+        } else if (userId) {
+            // Use user's profile preferences
+            const userPrefs = await this.userProfileService.getUserFilterPreferences(userId);
+            if (!userPrefs.showAllSpots) {
+                effectiveTransportModes = userPrefs.travelModes;
+            }
+            // If showAllSpots is true, effectiveTransportModes stays empty (show all)
+        }
+
+        // Build the query
+        let query = this.spotRepository.createQueryBuilder('spot')
+            .leftJoinAndSelect('spot.created_by', 'creator')
+            .select([
+                'spot.id', 'spot.name', 'spot.description', 'spot.latitude', 'spot.longitude',
+                'spot.spot_type', 'spot.safety_rating', 'spot.overall_rating', 'spot.is_verified',
+                'spot.photo_urls', 'spot.facilities', 'spot.tips', 'spot.transport_modes',
+                'spot.mode_ratings', 'spot.total_reviews', 'spot.last_reviewed', 'spot.created_at',
+                'creator.id', 'creator.display_name', 'creator.username'
+            ])
+            .where('spot.is_active = :isActive', { isActive: true });
+
+        // Apply transport mode filtering if specified
+        if (effectiveTransportModes.length > 0) {
+            // Filter spots that support at least one of the user's transport modes
+            query = query.andWhere(
+                'spot.transport_modes && :transportModes',
+                { transportModes: effectiveTransportModes }
+            );
+        }
+
+        // Apply location-based filtering
+        if (latitude && longitude) {
+            const radiusMeters = radius * 1000;
+            query = query.andWhere(
+                'ST_DWithin(spot.location, ST_MakePoint(:lng, :lat)::geography, :radius)'
+            ).setParameters({ lng: longitude, lat: latitude, radius: radiusMeters });
+
+            // Order by distance if location is provided
+            query = query.orderBy('ST_Distance(spot.location, ST_MakePoint(:lng, :lat)::geography)');
+        } else {
+            // Default ordering by creation date if no location
+            query = query.orderBy('spot.created_at', 'DESC');
+        }
+
+        // Apply additional filters
+        if (spotType) {
+            query = query.andWhere('spot.spot_type = :spotType', { spotType });
+        }
+
+        if (minRating) {
+            query = query.andWhere('spot.overall_rating >= :minRating', { minRating });
+        }
+
+        // Apply safety-based filtering
+        if (safetyPriority) {
+            switch (safetyPriority) {
+                case 'high':
+                    query = query.andWhere('spot.safety_rating >= :minSafety', { minSafety: 4.0 });
+                    break;
+                case 'medium':
+                    query = query.andWhere('spot.safety_rating >= :minSafety', { minSafety: 2.5 });
+                    break;
+                // 'low' doesn't add any safety filter
+            }
+        }
+
+        // Apply pagination
+        query = query.take(limit).skip(offset);
+
+        const spots = await query.getMany();
+
+        console.log(`🔍 Filtered spots query:
+            - Transport modes: ${effectiveTransportModes.join(', ') || 'All'}
+            - Location: ${latitude ? `${latitude}, ${longitude} (${radius}km)` : 'Any'}
+            - Spot type: ${spotType || 'Any'}
+            - Min rating: ${minRating || 'Any'}
+            - Safety priority: ${safetyPriority || 'Any'}
+            - Results: ${spots.length}/${limit}`);
+
+        return spots;
+    }
+
+    // NEW: Get spots specifically for a user based on their profile
+    async getSpotsForUser(userId: string, additionalFilters: {
+        latitude?: number;
+        longitude?: number;
+        radius?: number;
+        limit?: number;
+        offset?: number;
+    } = {}) {
+        return this.getSpotsFiltered({
+            ...additionalFilters,
+            userId: userId
+        });
+    }
+
+    // NEW: Get spots that are excellent for a specific transport mode
+    async getSpotsByTransportModeQuality(transportMode: TransportMode, filters: {
+        latitude?: number;
+        longitude?: number;
+        radius?: number;
+        minEffectiveness?: number;
+        limit?: number;
+        offset?: number;
+    } = {}) {
+        const { minEffectiveness = 4.0, ...otherFilters } = filters;
+
+        const spots = await this.getSpotsFiltered({
+            ...otherFilters,
+            transportModes: [transportMode]
+        });
+
+        // Filter by mode-specific effectiveness rating
+        return spots.filter(spot => {
+            const modeRating = spot.mode_ratings?.[transportMode];
+            return modeRating && modeRating.effectiveness >= minEffectiveness;
+        });
+    }
+
+
+
 }

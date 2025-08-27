@@ -2,11 +2,132 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { SpotService } from '../services/spotService';
 import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
-import {SpotType, TransportMode} from "../enum/enums";
+import {SpotType, TRANSPORT_MODE_LABELS, TransportMode} from "../enum/enums";
 
 
 const router = Router();
 const spotService = new SpotService();
+
+
+router.get('/filtered', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const {
+            transport_modes,
+            latitude,
+            longitude,
+            radius = 10,
+            limit = 50,
+            offset = 0,
+            spot_type,
+            min_rating,
+            safety_priority
+        } = req.query;
+
+        let transportModeFilter: TransportMode[] | undefined;
+        if (transport_modes) {
+            const modesArray = (transport_modes as string).split(',') as TransportMode[];
+            // Validate transport modes
+            const validModes = Object.values(TransportMode);
+            transportModeFilter = modesArray.filter(mode => validModes.includes(mode));
+        }
+
+        const filters: any = {
+            limit: Math.min(parseInt(limit as string), 100), // Cap at 100
+            offset: parseInt(offset as string),
+            transportModes: transportModeFilter,
+        };
+
+        // Add user ID for personalized filtering if authenticated
+        if (req.user?.userId) {
+            filters.userId = req.user.userId;
+        }
+
+        // Add location filtering
+        if (latitude && longitude) {
+            filters.latitude = parseFloat(latitude as string);
+            filters.longitude = parseFloat(longitude as string);
+            filters.radius = Math.min(parseFloat(radius as string), 100); // Cap at 100km
+        }
+
+        // Add other filters
+        if (spot_type && Object.values(SpotType).includes(spot_type as SpotType)) {
+            filters.spotType = spot_type as SpotType;
+        }
+
+        if (min_rating) {
+            const rating = parseFloat(min_rating as string);
+            if (rating >= 0 && rating <= 5) {
+                filters.minRating = rating;
+            }
+        }
+
+        if (safety_priority && ['high', 'medium', 'low'].includes(safety_priority as string)) {
+            filters.safetyPriority = safety_priority as 'high' | 'medium' | 'low';
+        }
+
+        const spots = await spotService.getSpotsFiltered(filters);
+
+        res.json({
+            data: spots,
+            pagination: {
+                limit: filters.limit,
+                offset: filters.offset,
+                total: spots.length
+            },
+            filters: {
+                transport_modes: transportModeFilter,
+                location: filters.latitude ? {
+                    latitude: filters.latitude,
+                    longitude: filters.longitude,
+                    radius: filters.radius
+                } : null,
+                spot_type,
+                min_rating: filters.minRating,
+                safety_priority,
+                personalized: !!req.user?.userId
+            },
+            message: req.user?.userId
+                ? 'Results personalized for your travel preferences'
+                : 'Showing filtered results'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// GET /api/v1/spots/for-mode/:mode - Get best spots for specific transport mode
+router.get('/for-mode/:mode', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { mode } = req.params;
+        const { latitude, longitude, radius, min_effectiveness, limit, offset } = req.query;
+
+        if (!Object.values(TransportMode).includes(mode as TransportMode)) {
+            throw createError('Invalid transport mode', 400);
+        }
+
+        const spots = await spotService.getSpotsByTransportModeQuality(mode as TransportMode, {
+            latitude: latitude ? parseFloat(latitude as string) : undefined,
+            longitude: longitude ? parseFloat(longitude as string) : undefined,
+            radius: radius ? parseFloat(radius as string) : undefined,
+            minEffectiveness: min_effectiveness ? parseFloat(min_effectiveness as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            offset: offset ? parseInt(offset as string) : undefined
+        });
+
+        res.json({
+            data: spots,
+            mode,
+            criteria: {
+                min_effectiveness: min_effectiveness || 4.0,
+                location: latitude && longitude ? { latitude, longitude, radius } : null
+            },
+            message: `Best spots for ${TRANSPORT_MODE_LABELS[mode as TransportMode]}`
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 
 // GET /api/v1/spots - Get all spots (public)
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -291,6 +412,49 @@ router.get('/:id/reviews/summary', async (req: Request, res: Response, next: Nex
         res.json({
             data: summary,
             message: 'Review summary retrieved successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// src/routes/spots.ts - Add filtered endpoint
+
+// GET /api/v1/spots/filtered - New smart filtering endpoint
+router.get('/filtered', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const {
+            transport_modes,
+            latitude,
+            longitude,
+            radius = 10,
+            limit = 50,
+            offset = 0
+        } = req.query;
+
+        let transportModeFilter: TransportMode[] | undefined;
+        if (transport_modes) {
+            transportModeFilter = (transport_modes as string).split(',') as TransportMode[];
+        }
+
+        const spots = await spotService.getSpotsFiltered({
+            transportModes: transportModeFilter,
+            latitude: latitude ? parseFloat(latitude as string) : undefined,
+            longitude: longitude ? parseFloat(longitude as string) : undefined,
+            radius: parseInt(radius as string),
+            limit: parseInt(limit as string),
+            offset: parseInt(offset as string)
+        });
+
+        res.json({
+            data: spots,
+            filters: {
+                transport_modes: transportModeFilter,
+                latitude,
+                longitude,
+                radius,
+                total_found: spots.length
+            }
         });
     } catch (error) {
         next(error);

@@ -1,8 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+// src/entities/User.ts - Add profile relationship
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, OneToOne } from 'typeorm';
 import { Spot } from './Spot';
 import { SpotReview } from './SpotReview';
 import { Trip } from './Trip';
 import { TripCollaborator } from './TripCollaborator';
+import { UserProfile } from './UserProfile'; // Add this import
 
 @Entity('users')
 export class User {
@@ -62,8 +64,12 @@ export class User {
     trips!: Trip[];
 
     @OneToMany(() => TripCollaborator, collaborator => collaborator.user)
-    trip_collaborations!: TripCollaborator[]; // ! Trips this user is collaborating on
+    trip_collaborations!: TripCollaborator[];
 
     @OneToMany(() => TripCollaborator, collaborator => collaborator.invited_by)
-    sent_trip_invitations!: TripCollaborator[]; // ! Trip invitations this user has sent
+    sent_trip_invitations!: TripCollaborator[];
+
+    // ADD: Profile relationship
+    @OneToOne(() => UserProfile, profile => profile.user)
+    profile!: UserProfile;
 }

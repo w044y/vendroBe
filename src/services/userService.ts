@@ -34,6 +34,10 @@ export class UserService {
         });
     }
 
+    async getUserProfile(id: string) {
+        return await this.
+    }
+
     async createUser(userData: {
         email: string;
         username?: string;

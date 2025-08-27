@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/userService';
 import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
+import { UserProfileService } from '../services/userProfileService';
+import { ExperienceLevel, SafetyPriority } from '../entities/UserProfile';
 
 const router = Router();
 const userService = new UserService();
@@ -112,6 +114,115 @@ router.get('/:id/stats', async (req: Request, res: Response, next: NextFunction)
     try {
         const stats = await userService.getUserStats(req.params.id);
         res.json({ data: stats });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/me/profile', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            throw createError('User not authenticated', 401);
+        }
+
+        // This would come from a new UserProfile table
+        const profile = await userService.getUserProfile(userId);
+
+        if (!profile) {
+            // No profile means they need onboarding
+            return res.status(404).json({
+                error: { message: 'Profile not found', statusCode: 404 }
+            });
+        }
+
+        res.json({ data: profile });
+    } catch (error) {
+        next(error);
+    }
+});
+
+
+const userProfileService = new UserProfileService();
+
+// GET /api/v1/users/me/profile
+router.get('/me/profile', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            throw createError('User not authenticated', 401);
+        }
+
+        const profile = await userProfileService.getUserProfile(userId);
+
+        if (!profile) {
+            return res.status(404).json({
+                error: {
+                    message: 'Profile not found - onboarding needed',
+                    statusCode: 404,
+                    onboardingRequired: true
+                }
+            });
+        }
+
+        res.json({ data: profile });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// PUT /api/v1/users/me/profile
+router.put('/me/profile', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            throw createError('User not authenticated', 401);
+        }
+
+        const updates = req.body;
+
+        // Try to update existing profile first
+        try {
+            const profile = await userProfileService.updateUserProfile(userId, updates);
+            res.json({
+                data: profile,
+                message: 'Profile updated successfully'
+            });
+        } catch (updateError: any) {
+            // If profile doesn't exist, create it
+            if (updateError.statusCode === 404) {
+                const newProfile = await userProfileService.createUserProfile(userId, {
+                    travelModes: updates.travelModes,
+                    primaryMode: updates.primaryMode || updates.travelModes[0],
+                    showAllSpots: updates.showAllSpots || false,
+                    experienceLevel: updates.experienceLevel || ExperienceLevel.BEGINNER,
+                    safetyPriority: updates.safetyPriority || SafetyPriority.HIGH,
+                    onboardingCompleted: updates.onboardingCompleted || true
+                });
+
+                res.status(201).json({
+                    data: newProfile,
+                    message: 'Profile created successfully'
+                });
+            } else {
+                throw updateError;
+            }
+        }
+    } catch (error) {
+        next(error);
+    }
+});
+
+// DELETE /api/v1/users/me/profile
+router.delete('/me/profile', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            throw createError('User not authenticated', 401);
+        }
+
+        const result = await userProfileService.deleteUserProfile(userId);
+        res.json(result);
     } catch (error) {
         next(error);
     }

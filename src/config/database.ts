@@ -7,6 +7,7 @@ import { TripSpot } from '../entities/TripSpot';
 import { TripCollaborator } from '../entities/TripCollaborator';
 import { TripLocationHistory } from '../entities/TripLocationHistory';
 import { MagicToken } from '../entities/MagicToken';
+import {UserProfile} from "@/entities/UserProfile";
 
 export const AppDataSource = new DataSource({
     type: 'postgres',
@@ -21,6 +22,7 @@ export const AppDataSource = new DataSource({
 
     entities: [
         User,
+        UserProfile,
         Spot,
         SpotReview,
         Trip,
