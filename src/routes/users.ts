@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { UserService } from '@/services/userService';
+import { UserService } from '../services/userService';
 import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { UserProfileService } from '../services/userProfileService';
@@ -44,7 +44,7 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response, next: NextF
 });
 
 // POST /api/v1/users - Create new user (protected - admin only or auth service)
-router.post('/', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, username, display_name, bio } = req.body;
 
@@ -95,7 +95,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response, next: 
 });
 
 // DELETE /api/v1/users/:id - Delete user (protected - own account only)
-router.delete('/:id', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
         // Users can only delete their own account
         if (req.user?.userId !== req.params.id) {
@@ -227,5 +227,7 @@ router.delete('/me/profile', authenticateToken, async (req: Request, res: Respon
         next(error);
     }
 });
+
+
 
 export default router;

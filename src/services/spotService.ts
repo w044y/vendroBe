@@ -4,7 +4,7 @@ import { SpotReview } from '../entities/SpotReview';
 import { createError } from '../middleware/errorHandler';
 import {User} from "../entities/User";
 import {SpotType, TransportMode} from "../enum/enums";
-import {UserProfileService} from "@/services/userProfileService";
+import {UserProfileService} from "../services/userProfileService";
 
 export class SpotService {
     private spotRepository = AppDataSource.getRepository(Spot);

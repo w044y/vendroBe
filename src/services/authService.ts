@@ -10,37 +10,40 @@ export class AuthService {
     private magicTokenRepository = AppDataSource.getRepository(MagicToken);
 
     async sendMagicLink(email: string): Promise<{ message: string; email: string }> {
-        // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             throw createError('Invalid email format', 400);
         }
 
-        // Check if user exists, if not create one
         let user = await this.userRepository.findOne({ where: { email } });
 
         if (!user) {
-            // Auto-create user for magic link flow
             user = this.userRepository.create({
                 email,
-                display_name: email.split('@')[0], // Use email prefix as default name
+                display_name: email.split('@')[0],
             });
             user = await this.userRepository.save(user);
             console.log(`✅ Auto-created user for: ${email}`);
         }
 
-        // Clean up old unused tokens for this email
         await this.magicTokenRepository.delete({
             email,
             is_used: false,
         });
 
-        // Generate new magic token
-        const token = generateMagicToken();
-        const expiresAt = new Date();
-        expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes expiry
+        // Generate token
+        let token: string;
+        if (process.env.NODE_ENV === 'development' && email === 'dev@vendro.app') {
+            // Use predictable token for development
+            token = 'dev-magic-token-12345';
+            console.log('🔧 Using development magic token for:', email);
+        } else {
+            token = generateMagicToken();
+        }
 
-        // Save magic token
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
         const magicToken = this.magicTokenRepository.create({
             email,
             token,
@@ -48,15 +51,17 @@ export class AuthService {
         });
         await this.magicTokenRepository.save(magicToken);
 
-        // Create magic link URL
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        const magicLink = `${baseUrl}/auth/verify?token=${token}&email=${encodeURIComponent(email)}`;
+        // Send email only in production or if explicitly requested
+        if (process.env.NODE_ENV !== 'development' || process.env.SEND_DEV_EMAILS === 'true') {
+            const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+            const magicLink = `${baseUrl}/auth/verify?token=${token}&email=${encodeURIComponent(email)}`;
+            await sendMagicLinkEmail(email, magicLink, user.display_name);
+        }
 
-        // Send email
-        await sendMagicLinkEmail(email, magicLink, user.display_name);
-
-        console.log(`✅ Magic link sent to: ${email}`);
-        console.log(`🔗 Magic link: ${magicLink}`); // Log for development
+        console.log(`✅ Magic link prepared for: ${email}`);
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`🔗 Development token: ${token}`);
+        }
 
         return {
             message: 'Magic link sent to your email',
@@ -69,7 +74,6 @@ export class AuthService {
         accessToken: string;
         message: string;
     }> {
-        // Find the magic token
         const magicToken = await this.magicTokenRepository.findOne({
             where: { token, email, is_used: false },
         });
@@ -78,12 +82,10 @@ export class AuthService {
             throw createError('Invalid or expired magic link', 401);
         }
 
-        // Check if token has expired
         if (new Date() > magicToken.expires_at) {
             throw createError('Magic link has expired', 401);
         }
 
-        // Find the user
         const user = await this.userRepository.findOne({ where: { email } });
         if (!user) {
             throw createError('User not found', 404);

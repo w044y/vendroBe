@@ -1,9 +1,11 @@
 import { AppDataSource } from '../config/database';
 import { User } from '../entities/User';
 import { createError } from '../middleware/errorHandler';
+import {UserProfile} from "../entities/UserProfile";
 
 export class UserService {
     private userRepository = AppDataSource.getRepository(User);
+    private userProfileRepository = AppDataSource.getRepository(UserProfile);
 
     async getAllUsers(limit: number = 50, offset: number = 0) {
         return await this.userRepository.find({
@@ -32,6 +34,32 @@ export class UserService {
             select: ['id', 'email', 'username', 'display_name', 'profile_photo_url', 'vendro_points', 'safety_rating', 'is_verified']
         });
     }
+
+    async getUserProfile(userId: string) {
+        const profile = await this.userProfileRepository.findOne({
+            where: { user_id: userId },
+            relations: ['user']
+        });
+
+        if (!profile) {
+            return null; // No profile means user needs onboarding
+        }
+
+        return {
+            userId: profile.user_id,
+            travelModes: profile.travel_modes,
+            preferences: {
+                primaryMode: profile.primary_mode,
+                showAllSpots: profile.show_all_spots,
+                experienceLevel: profile.experience_level,
+                safetyPriority: profile.safety_priority
+            },
+            onboardingCompleted: profile.onboarding_completed,
+            createdAt: profile.created_at,
+            updatedAt: profile.updated_at
+        };
+    }
+
     async createUser(userData: {
         email: string;
         username?: string;
