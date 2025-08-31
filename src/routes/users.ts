@@ -4,6 +4,8 @@ import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { UserProfileService } from '../services/userProfileService';
 import { ExperienceLevel, SafetyPriority } from '../entities/UserProfile';
+import {AppDataSource} from "@/config/database";
+import {UserBadge} from "@/entities/UserBadge";
 
 const router = Router();
 const userService = new UserService();
@@ -228,6 +230,104 @@ router.delete('/me/profile', authenticateToken, async (req: Request, res: Respon
     }
 });
 
+router.get('/:id/complete-profile', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userProfileService = new UserProfileService();
+        const completeProfile = await userProfileService.getCompleteUserProfile(req.params.id);
 
+        res.json({
+            data: completeProfile,
+            message: 'Complete profile retrieved successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+
+    router.put('/me/profile/extended', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                throw createError('User not authenticated', 401);
+            }
+
+            const { bio, languages, countriesVisited, publicProfile, showStats } = req.body;
+
+            const userProfileService = new UserProfileService();
+            const updatedProfile = await userProfileService.updateExtendedProfile(userId, {
+                bio,
+                languages,
+                countriesVisited,
+                publicProfile,
+                showStats
+            });
+
+            res.json({
+                data: updatedProfile,
+                message: 'Extended profile updated successfully'
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+
+    router.post('/me/verify', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                throw createError('User not authenticated', 401);
+            }
+
+            const { type, metadata } = req.body;
+
+            const userProfileService = new UserProfileService();
+            await userProfileService.addVerification(userId, type, metadata);
+
+            res.json({
+                message: 'Verification added successfully'
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/:id/badges', async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userBadgeRepository = AppDataSource.getRepository(UserBadge);
+            const badges = await userBadgeRepository.find({
+                where: { user_id: req.params.id },
+                order: { sort_order: 'ASC', earned_at: 'DESC' }
+            });
+
+            res.json({
+                data: badges,
+                message: 'Badges retrieved successfully'
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+// POST /api/v1/users/me/stats/refresh - Manually refresh profile stats
+    router.post('/me/stats/refresh', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                throw createError('User not authenticated', 401);
+            }
+
+            const userProfileService = new UserProfileService();
+            await userProfileService.updateProfileStats(userId);
+
+            res.json({
+                message: 'Profile statistics refreshed successfully'
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+
+});
 
 export default router;
