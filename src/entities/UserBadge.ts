@@ -1,6 +1,7 @@
 // src/entities/UserBadge.ts - Complete badge system
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './User';
+import {UserProfile} from "../entities/UserProfile";
 
 export enum BadgeCategory {
     TRUST = 'trust',           // Email verified, Phone verified
@@ -49,4 +50,8 @@ export class UserBadge {
     @ManyToOne(() => User)
     @JoinColumn({ name: 'user_id' })
     user!: User;
+
+    @ManyToOne(() => UserProfile, profile => profile.badges)
+    @JoinColumn({ name: 'user_id' })
+    user_profile: UserProfile | undefined;
 }

@@ -21,7 +21,7 @@ export class UserProfileService {
     async getCompleteUserProfile(userId: string) {
         const profile = await this.userProfileRepository.findOne({
             where: { user_id: userId },
-            relations: ['user', 'badges', 'verifications']
+            relations: ['user']  // Remove 'badges' and 'verifications'
         });
 
         if (!profile) {
@@ -31,11 +31,16 @@ export class UserProfileService {
         // Calculate trust score
         const trustScore = await this.calculateTrustScore(userId);
 
-        // Get recent badges (Phase 2)
+        // Get badges separately (they're in a different table)
         const recentBadges = await this.userBadgeRepository.find({
             where: { user_id: userId },
             order: { earned_at: 'DESC' },
             take: 10
+        });
+
+        // Get verifications separately if needed
+        const verifications = await this.trustVerificationRepository.find({
+            where: { user_id: userId }
         });
 
         // Get badge counts by category
@@ -46,6 +51,7 @@ export class UserProfileService {
             trustScore,
             badges: recentBadges,
             badgeCounts,
+            verifications,  // Add this if needed
             memberSince: profile.created_at,
             isNewMember: this.isNewMember(profile.created_at)
         };
@@ -84,7 +90,73 @@ export class UserProfileService {
 
         return Math.min(Math.round(score), 100);
     }
+    async getUserProfile(userId: string) {
+        const profile = await this.userProfileRepository.findOne({
+            where: { user_id: userId },
+            relations: ['user']
+        });
 
+        if (!profile) {
+            throw createError('Profile not found', 404);
+        }
+
+        return profile;
+    }
+
+    async updateUserProfile(userId: string, updates: any) {
+        const profile = await this.userProfileRepository.findOne({
+            where: { user_id: userId }
+        });
+
+        if (!profile) {
+            throw createError('Profile not found', 404);
+        }
+
+        // Update basic profile fields
+        if (updates.travelModes !== undefined) profile.travel_modes = updates.travelModes;
+        if (updates.primaryMode !== undefined) profile.primary_mode = updates.primaryMode;
+        if (updates.experienceLevel !== undefined) profile.experience_level = updates.experienceLevel;
+        if (updates.safetyPriority !== undefined) profile.safety_priority = updates.safetyPriority;
+        if (updates.showAllSpots !== undefined) profile.show_all_spots = updates.showAllSpots;
+        if (updates.onboardingCompleted !== undefined) profile.onboarding_completed = updates.onboardingCompleted;
+
+        const savedProfile = await this.userProfileRepository.save(profile);
+        await this.updateProfileStats(userId);
+
+        return savedProfile;
+    }
+
+    async createUserProfile(userId: string, profileData: any) {
+        const profile = this.userProfileRepository.create({
+            user_id: userId,
+            travel_modes: profileData.travelModes,
+            primary_mode: profileData.primaryMode,
+            experience_level: profileData.experienceLevel,
+            safety_priority: profileData.safetyPriority,
+            show_all_spots: profileData.showAllSpots,
+            onboarding_completed: profileData.onboardingCompleted,
+            // Initialize other fields with defaults
+            email_verified: false,
+            phone_verified: false,
+            social_connected: false,
+            languages: ['en'],
+            countries_visited: [],
+            public_profile: true,
+            show_stats: true
+        });
+
+        return await this.userProfileRepository.save(profile);
+    }
+
+    async deleteUserProfile(userId: string) {
+        const result = await this.userProfileRepository.delete({ user_id: userId });
+
+        if (result.affected === 0) {
+            throw createError('Profile not found', 404);
+        }
+
+        return { message: 'Profile deleted successfully' };
+    }
     // PHASE 1: Update profile statistics (called after reviews/spots)
     async updateProfileStats(userId: string): Promise<void> {
         const profile = await this.userProfileRepository.findOne({
@@ -378,7 +450,7 @@ export class UserProfileService {
         description: string;
         emoji: string;
         category: BadgeCategory;
-        level?: string | null;
+        level?: string | null;  // This allows null
         sortOrder: number;
     }): Promise<void> {
         const existingBadge = await this.userBadgeRepository.findOne({
@@ -393,7 +465,7 @@ export class UserProfileService {
                 description: badgeData.description,
                 emoji: badgeData.emoji,
                 category: badgeData.category,
-                level: badgeData.level,
+                level: badgeData.level || undefined,  // Convert null to undefined
                 sort_order: badgeData.sortOrder
             });
 
@@ -401,7 +473,6 @@ export class UserProfileService {
             console.log(`🏆 Badge awarded: ${badgeData.name} to user ${userId}`);
         }
     }
-
     private async getBadgeCounts(userId: string) {
         const badges = await this.userBadgeRepository.find({
             where: { user_id: userId }
@@ -424,7 +495,44 @@ export class UserProfileService {
         const daysSinceJoining = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
         return daysSinceJoining < 30; // New if less than 30 days
     }
+    async getUserFilterPreferences(userId: string): Promise<{
+        travelModes: TransportMode[];
+        showAllSpots: boolean;
+        safetyPriority: SafetyPriority;
+        experienceLevel: ExperienceLevel;
+    }> {
+        try {
+            const profile = await this.userProfileRepository.findOne({
+                where: { user_id: userId }
+            });
 
+            if (!profile) {
+                // Return defaults if profile not found
+                return {
+                    travelModes: [TransportMode.HITCHHIKING],
+                    showAllSpots: false,
+                    safetyPriority: SafetyPriority.HIGH,
+                    experienceLevel: ExperienceLevel.BEGINNER
+                };
+            }
+
+            return {
+                travelModes: profile.travel_modes || [TransportMode.HITCHHIKING],
+                showAllSpots: profile.show_all_spots || false,
+                safetyPriority: profile.safety_priority || SafetyPriority.HIGH,
+                experienceLevel: profile.experience_level || ExperienceLevel.BEGINNER
+            };
+        } catch (error) {
+            console.error('Error getting user filter preferences:', error);
+            // Return defaults on error
+            return {
+                travelModes: [TransportMode.HITCHHIKING],
+                showAllSpots: false,
+                safetyPriority: SafetyPriority.HIGH,
+                experienceLevel: ExperienceLevel.BEGINNER
+            };
+        }
+    }
     // Verification methods
     async addVerification(userId: string, type: VerificationType, metadata?: any): Promise<void> {
         const verification = this.trustVerificationRepository.create({

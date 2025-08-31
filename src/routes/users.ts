@@ -4,8 +4,8 @@ import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { UserProfileService } from '../services/userProfileService';
 import { ExperienceLevel, SafetyPriority } from '../entities/UserProfile';
-import {AppDataSource} from "@/config/database";
-import {UserBadge} from "@/entities/UserBadge";
+import {AppDataSource} from "../config/database";
+import {UserBadge} from "../entities/UserBadge";
 
 const router = Router();
 const userService = new UserService();
@@ -121,28 +121,6 @@ router.get('/:id/stats', async (req: Request, res: Response, next: NextFunction)
     }
 });
 
-router.get('/me/profile', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const userId = req.user?.userId;
-        if (!userId) {
-            throw createError('User not authenticated', 401);
-        }
-
-        // This would come from a new UserProfile table
-        const profile = await userService.getUserProfile(userId);
-
-        if (!profile) {
-            // No profile means they need onboarding
-            return res.status(404).json({
-                error: { message: 'Profile not found', statusCode: 404 }
-            });
-        }
-
-        res.json({ data: profile });
-    } catch (error) {
-        next(error);
-    }
-});
 
 
 const userProfileService = new UserProfileService();
@@ -243,32 +221,33 @@ router.get('/:id/complete-profile', optionalAuth, async (req: Request, res: Resp
         next(error);
     }
 
-    router.put('/me/profile/extended', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const userId = req.user?.userId;
-            if (!userId) {
-                throw createError('User not authenticated', 401);
-            }
-
-            const { bio, languages, countriesVisited, publicProfile, showStats } = req.body;
-
-            const userProfileService = new UserProfileService();
-            const updatedProfile = await userProfileService.updateExtendedProfile(userId, {
-                bio,
-                languages,
-                countriesVisited,
-                publicProfile,
-                showStats
-            });
-
-            res.json({
-                data: updatedProfile,
-                message: 'Extended profile updated successfully'
-            });
-        } catch (error) {
-            next(error);
+})
+router.put('/me/profile/extended', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            throw createError('User not authenticated', 401);
         }
-    });
+
+        const { bio, languages, countriesVisited, publicProfile, showStats } = req.body;
+
+        const userProfileService = new UserProfileService();
+        const updatedProfile = await userProfileService.updateExtendedProfile(userId, {
+            bio,
+            languages,
+            countriesVisited,
+            publicProfile,
+            showStats
+        });
+
+        res.json({
+            data: updatedProfile,
+            message: 'Extended profile updated successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
 
 
     router.post('/me/verify', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
@@ -328,6 +307,5 @@ router.get('/:id/complete-profile', optionalAuth, async (req: Request, res: Resp
     });
 
 
-});
 
 export default router;

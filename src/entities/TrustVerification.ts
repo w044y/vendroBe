@@ -1,6 +1,7 @@
 // src/entities/TrustVerification.ts - Simple verification tracking
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './User';
+import {UserProfile} from "../entities/UserProfile";
 
 export enum VerificationType {
     EMAIL = 'email',
@@ -40,4 +41,8 @@ export class TrustVerification {
     @ManyToOne(() => User)
     @JoinColumn({ name: 'user_id' })
     user!: User;
+
+    @ManyToOne(() => UserProfile, profile => profile.verifications)
+    @JoinColumn({ name: 'user_id' })
+    user_profile: UserProfile | undefined;
 }

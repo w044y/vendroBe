@@ -123,9 +123,9 @@ export class UserProfile {
     @OneToMany(() => SpotReview, review => review.user)
     reviews!: SpotReview[];
 
-    @OneToMany(() => UserBadge, badge => badge.user)
+    @OneToMany(() => UserBadge, badge => badge.user_profile)  // Changed from badge.user
     badges!: UserBadge[];
 
-    @OneToMany(() => TrustVerification, verification => verification.user)
+    @OneToMany(() => TrustVerification, verification => verification.user_profile)  // Changed from verification.user
     verifications!: TrustVerification[];
 }
