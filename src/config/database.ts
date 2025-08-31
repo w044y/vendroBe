@@ -46,3 +46,30 @@ export const initializeDatabase = async () => {
         process.exit(1);
     }
 };
+
+// src/config/database.ts - Add this after database initialization
+export const setupDevelopmentData = async () => {
+    if (process.env.NODE_ENV === 'development') {
+        const userRepository = AppDataSource.getRepository(User);
+
+        // Check if dev user exists
+        const devUser = await userRepository.findOne({
+            where: { email: 'dev@vendro.app' }
+        });
+
+        if (!devUser) {
+            const newDevUser = userRepository.create({
+                id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+                email: 'dev@vendro.app',
+                username: 'devuser',
+                display_name: 'Dev User',
+                vendro_points: 100,
+                safety_rating: 4.5,
+                is_verified: true,
+            });
+
+            await userRepository.save(newDevUser);
+            console.log('✅ Created development user');
+        }
+    }
+};

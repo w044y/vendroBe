@@ -102,9 +102,16 @@ export class SpotService {
         facilities?: string[];
         created_by_id: string;
     }) {
+        // ✅ REMOVED: await this.ensureDevUser(); // Don't create users here!
 
-        await this.ensureDevUser();
+        // Validate that the creator exists
+        const creator = await this.userRepository.findOne({
+            where: { id: spotData.created_by_id }
+        });
 
+        if (!creator) {
+            throw createError('Creator user not found. Please ensure user is authenticated.', 400);
+        }
 
         // Validate coordinates
         if (spotData.latitude < -90 || spotData.latitude > 90) {
@@ -126,14 +133,26 @@ export class SpotService {
     }
 
 
-    private async ensureDevUser() {
-        const DEV_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'; // Proper UUID format
 
-        const devUser = await this.userRepository.findOne({
-            where: { id: DEV_USER_ID }
-        });
+    async ensureDevUser() {
+        const DEV_USER_ID = 'c2bbc6fc-52ac-4c8d-a3b1-d8cf72189fd7';
 
-        if (!devUser) {
+        try {
+            // Check if user already exists by any unique field
+            const existingUser = await this.userRepository.findOne({
+                where: [
+                    { id: DEV_USER_ID },
+                    { email: 'dev@vendro.app' },
+                    { username: 'devuser' }
+                ]
+            });
+
+            if (existingUser) {
+                console.log('✅ Dev user already exists:', existingUser.id);
+                return existingUser;
+            }
+
+            // Create new dev user
             const newDevUser = this.userRepository.create({
                 id: DEV_USER_ID,
                 email: 'dev@vendro.app',
@@ -143,11 +162,33 @@ export class SpotService {
                 safety_rating: 4.5,
                 is_verified: true,
             });
-            await this.userRepository.save(newDevUser);
+
+            const savedUser = await this.userRepository.save(newDevUser);
             console.log('✅ Created dev user with UUID:', DEV_USER_ID);
+            return savedUser;
+
+        } catch (error: any) {
+            console.error('❌ Error in ensureDevUser:', error);
+
+            if (error.code === '23505') { // Unique constraint violation
+                console.log('🔧 Constraint violation - user probably exists, trying to find...');
+
+                const existingUser = await this.userRepository.findOne({
+                    where: [
+                        { email: 'dev@vendro.app' },
+                        { username: 'devuser' }
+                    ]
+                });
+
+                if (existingUser) {
+                    console.log('✅ Found existing user after constraint violation:', existingUser.id);
+                    return existingUser;
+                }
+            }
+
+            throw new Error(`Failed to ensure dev user: ${error.message}`);
         }
     }
-
 
 
     async updateSpot(id: string, updateData: {

@@ -1,12 +1,13 @@
 import 'reflect-metadata';
 import 'dotenv/config';
-import { AppDataSource, initializeDatabase } from './config/database';
+import {AppDataSource, initializeDatabase, setupDevelopmentData} from './config/database';
 import { User } from './entities/User';
-import { Spot, SpotType } from './entities/Spot';
+import { Spot} from './entities/Spot';
 import { SpotReview } from './entities/SpotReview';
 import { Trip, TripStatus } from './entities/Trip';
 import { TripSpot, TripSpotStatus } from './entities/TripSpot';
 import { TripCollaborator, CollaboratorRole, InviteStatus } from './entities/TripCollaborator';
+import {SpotType} from "./enum/enums";
 
 async function testDatabase() {
     console.log('🧪 Starting comprehensive database test...\n');
@@ -14,6 +15,7 @@ async function testDatabase() {
     try {
         // Initialize database connection
         await initializeDatabase();
+        await setupDevelopmentData();
 
         // Clear existing test data
         console.log('🧹 Clearing existing test data...');

@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { initializeDatabase } from './config/database';
+import {initializeDatabase, setupDevelopmentData} from './config/database';
 
 // Import routes (we'll create these next)
 import authRoutes from './routes/auth';
@@ -123,7 +123,7 @@ class App {
         try {
             // Initialize database connection
             await initializeDatabase();
-
+            await setupDevelopmentData();
             // Start server
             this.app.listen(this.port, () => {
                 console.log(`

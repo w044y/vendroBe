@@ -238,6 +238,21 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             throw createError('Invalid spot_type. Valid types: ' + Object.values(SpotType).join(', '), 400);
         }
 
+        // FIXED: Handle development vs production user ID
+        let createdById: string;
+
+        if (process.env.NODE_ENV === 'development') {
+            // In development, ensure dev user exists and use it
+            await spotService.ensureDevUser();
+            createdById = 'c2bbc6fc-52ac-4c8d-a3b1-d8cf72189fd7';
+        } else {
+            // In production, require authentication
+            if (!req.user?.userId) {
+                throw createError('Authentication required', 401);
+            }
+            createdById = req.user.userId;
+        }
+
         const spot = await spotService.createSpot({
             name,
             description,
@@ -247,7 +262,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             tips,
             accessibility_info,
             facilities: facilities || [],
-            created_by_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'// Use authenticated user ID
+            created_by_id: createdById
         });
 
         res.status(201).json({
