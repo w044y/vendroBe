@@ -17,6 +17,7 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "test:db": "ts-node --files src/test-database.ts",
     "reset:db": "ts-node --files src/complete-reset.ts",
+    "quick-reset:db": "ts-node --files src/quick-cleanup.ts",
     "db:reset": "ts-node -e \"import('./src/config/database').then(m => m.AppDataSource.initialize().then(() => m.AppDataSource.dropDatabase()).then(() => m.AppDataSource.synchronize()).then(() => process.exit(0)))\"",
     "db:sync": "ts-node -e \"import('./src/config/database').then(m => m.AppDataSource.initialize().then(() => m.AppDataSource.synchronize()).then(() => process.exit(0)))\""
   },

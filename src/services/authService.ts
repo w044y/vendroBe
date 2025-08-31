@@ -16,15 +16,33 @@ export class AuthService {
         }
 
         let user = await this.userRepository.findOne({ where: { email } });
-
         if (!user) {
-            user = this.userRepository.create({
-                email,
-                display_name: email.split('@')[0],
-            });
-            user = await this.userRepository.save(user);
-            console.log(`✅ Auto-created user for: ${email}`);
+            // PROBLEM: This might be trying to create a user with duplicate email/username
+            try {
+                await this.magicTokenRepository.delete({
+                    email,
+                    is_used: false,
+                });    user = this.userRepository.create({
+                    email,
+                    display_name: email.split('@')[0], // This could cause username conflicts
+                    username: email.split('@')[0], // ADD: Make username unique
+                });
+                user = await this.userRepository.save(user);
+                console.log(`✅ Auto-created user for: ${email}`);
+            } catch (createError: any) {
+                // Handle duplicate constraint error
+                if (createError.code === '23505') { // PostgreSQL unique violation code
+                    console.log(`⚠️ User might already exist, trying to find: ${email}`);
+                    user = await this.userRepository.findOne({ where: { email } });
+                    if (!user) {
+                        throw createError('Failed to create or find user', 500);
+                    }
+                } else {
+                    throw createError;
+                }
+            }
         }
+
 
         await this.magicTokenRepository.delete({
             email,
@@ -35,8 +53,8 @@ export class AuthService {
         let token: string;
         if (process.env.NODE_ENV === 'development' && email === 'dev@vendro.app') {
             // Use predictable token for development
-            token = 'dev-magic-token-12345';
-            console.log('🔧 Using development magic token for:', email);
+            token = `dev-magic-token-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            console.log('🔧 Using development magic token for:', email, 'Token:', token);
         } else {
             token = generateMagicToken();
         }
@@ -49,7 +67,24 @@ export class AuthService {
             token,
             expires_at: expiresAt,
         });
-        await this.magicTokenRepository.save(magicToken);
+        try {
+            await this.magicTokenRepository.save(magicToken);
+            console.log('✅ Magic token saved successfully');
+        } catch (saveError: any) {
+            console.error('❌ Failed to save magic token:', saveError);
+            // If it's still a duplicate, force delete and retry
+            if (saveError.code === '23505') {
+                console.log('🔧 Constraint violation, force cleaning tokens...');
+                await this.magicTokenRepository.query(
+                    'DELETE FROM magic_tokens WHERE email = $1',
+                    [email]
+                );
+                await this.magicTokenRepository.save(magicToken);
+                console.log('✅ Token saved after cleanup');
+            } else {
+                throw saveError;
+            }
+        }
 
         // Send email only in production or if explicitly requested
         if (process.env.NODE_ENV !== 'development' || process.env.SEND_DEV_EMAILS === 'true') {

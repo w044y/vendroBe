@@ -2,7 +2,7 @@ import jwt, {Secret} from 'jsonwebtoken';
 import { createError } from '../middleware/errorHandler';
 
 const JWT_SECRET: Secret = process.env.JWT_SECRET!;
-const JWT_EXPIRES_IN:number = 100;
+const JWT_EXPIRES_IN:number = 1000;
 
 if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is required');
@@ -24,8 +24,10 @@ export const generateToken = (payload: { userId: string; email: string }): strin
 export const verifyToken = (token: string): JwtPayload => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+        console.log('✅ JWT token verified for user:', decoded.userId);
         return decoded;
     } catch (error) {
+        console.error('❌ JWT verification failed:', error);
         if (error instanceof jwt.TokenExpiredError) {
             throw createError('Token has expired', 401);
         } else if (error instanceof jwt.JsonWebTokenError) {
