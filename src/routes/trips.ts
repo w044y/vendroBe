@@ -14,8 +14,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         const offset = parseInt(req.query.offset as string) || 0;
         const status = req.query.status as TripStatus;
         const is_public = req.query.is_public === 'true' ? true : req.query.is_public === 'false' ? false : undefined;
-        const user_id = req.query.user_id as string;
-
+        let user_id = req.query.user_id as string;
+        if (user_id === 'current') {
+            if (process.env.NODE_ENV === 'development') {
+                // Use dev user in development
+                user_id = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+                console.log('🔧 [DEV] Using development user for trips query');
+            } else {
+                // In production, get from authenticated user
+                if (!req.user?.userId) {
+                    throw createError('Authentication required', 401);
+                }
+                user_id = req.user.userId;
+            }
+        }
         if (limit > 100) {
             throw createError('Limit cannot exceed 100', 400);
         }

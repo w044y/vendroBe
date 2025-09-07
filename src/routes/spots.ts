@@ -240,11 +240,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
         // FIXED: Handle development vs production user ID
         let createdById: string;
-
         if (process.env.NODE_ENV === 'development') {
             // In development, ensure dev user exists and use it
-            await spotService.ensureDevUser();
-            createdById = 'c2bbc6fc-52ac-4c8d-a3b1-d8cf72189fd7';
+            const devUser = await spotService.ensureDevUser();
+            createdById = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'; // FIXED: Match database setup
+            console.log('🔧 [DEV] Creating spot as development user:', createdById);
         } else {
             // In production, require authentication
             if (!req.user?.userId) {

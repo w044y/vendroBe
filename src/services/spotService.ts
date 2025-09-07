@@ -70,23 +70,28 @@ export class SpotService {
         return spot;
     }
 
+    // src/services/spotService.ts - Fixed PostGIS query
     async getNearbySpots(latitude: number, longitude: number, radiusKm: number = 10, limit: number = 20) {
         const radiusMeters = radiusKm * 1000;
 
+        // FIXED: Use addSelect with alias and orderBy with the alias
         return await this.spotRepository
             .createQueryBuilder('spot')
             .leftJoinAndSelect('spot.created_by', 'creator')
             .select([
                 'spot.id', 'spot.name', 'spot.description', 'spot.latitude', 'spot.longitude',
                 'spot.spot_type', 'spot.safety_rating', 'spot.overall_rating', 'spot.is_verified',
-                'spot.facilities', 'spot.tips',
+                'spot.facilities', 'spot.tips', 'spot.transport_modes', 'spot.total_reviews',
+                'spot.created_at',
                 'creator.id', 'creator.display_name', 'creator.username'
             ])
+            // Add distance calculation as a selected field with alias
+            .addSelect('ST_Distance(spot.location, ST_MakePoint(:lng, :lat)::geography)', 'distance')
             .where('spot.is_active = :isActive', { isActive: true })
             .andWhere('ST_DWithin(spot.location, ST_MakePoint(:lng, :lat)::geography, :radius)')
             .setParameters({ lng: longitude, lat: latitude, radius: radiusMeters })
-            .orderBy('ST_Distance(spot.location, ST_MakePoint(:lng, :lat)::geography)')
-            .setParameters({ lng: longitude, lat: latitude })
+            // FIXED: Order by the alias, not the full expression
+            .orderBy('distance', 'ASC')
             .take(limit)
             .getMany();
     }
@@ -135,7 +140,8 @@ export class SpotService {
 
 
     async ensureDevUser() {
-        const DEV_USER_ID = 'c2bbc6fc-52ac-4c8d-a3b1-d8cf72189fd7';
+        // FIXED: Use the same ID as your database setup
+        const DEV_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
         try {
             // Check if user already exists by any unique field
@@ -189,7 +195,6 @@ export class SpotService {
             throw new Error(`Failed to ensure dev user: ${error.message}`);
         }
     }
-
 
     async updateSpot(id: string, updateData: {
         name?: string;
