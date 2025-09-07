@@ -12,7 +12,7 @@ export enum VerificationType {
 export class TrustVerification {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
-    @Column()
+    @Column('uuid')
     user_id!: string;
     @Column({
         type: 'enum',

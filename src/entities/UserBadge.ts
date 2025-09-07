@@ -1,40 +1,54 @@
-// src/entities/UserBadge.ts - Complete badge system
+// src/entities/UserBadge.ts - FIXED VERSION
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import {UserProfile} from "../entities/UserProfile";
+import { UserProfile } from './UserProfile';
+
 export enum BadgeCategory {
-    TRUST = 'trust',           // Email verified, Phone verified
-    REVIEWER = 'reviewer',     // Helpful reviews, Expert reviewer
-    CONTRIBUTOR = 'contributor', // Spot creator, Verified spots
-    EXPLORER = 'explorer',     // Countries visited, Multi-modal
-    COMMUNITY = 'community',   // Community helper, Long-time member
-    SPECIAL = 'special'        // Beta tester, Contest winner
+    TRUST = 'trust',
+    REVIEWER = 'reviewer',
+    CONTRIBUTOR = 'contributor',
+    EXPLORER = 'explorer',
+    COMMUNITY = 'community',
+    SPECIAL = 'special'
 }
+
 @Entity('user_badges')
 export class UserBadge {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
-    @Column()
+
+    // FIX: Make sure this is UUID type to match user_profiles.user_id
+    @Column('uuid')
     user_id!: string;
+
     @Column()
-    badge_key!: string; // 'email_verified', 'helpful_reviewer_gold'
+    badge_key!: string;
+
     @Column()
-    name!: string; // 'Email Verified', 'Expert Reviewer'
+    name!: string;
+
     @Column()
-    description!: string; // 'Verified email address', 'Left 50+ helpful reviews'
+    description!: string;
+
     @Column()
-    emoji!: string; // '✅', '⭐', '🏆'
+    emoji!: string;
+
     @Column({
         type: 'enum',
         enum: BadgeCategory
     })
     category!: BadgeCategory;
+
     @Column({ nullable: true })
-    level!: string; // 'bronze', 'silver', 'gold', null for single-level badges
+    level!: string;
+
     @Column({ type: 'int', default: 0 })
-    sort_order!: number; // For display ordering
+    sort_order!: number;
+
     @CreateDateColumn()
     earned_at!: Date;
-    @ManyToOne('UserProfile', 'badges')  // Changed to strings
+
+    // FIX: Proper relationship
+    @ManyToOne(() => UserProfile, profile => profile.badges, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'user_id', referencedColumnName: 'user_id' })
     user_profile!: UserProfile;
 }

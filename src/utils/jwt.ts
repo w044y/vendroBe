@@ -42,3 +42,14 @@ export const generateMagicToken = (): string => {
     const crypto = require('crypto');
     return crypto.randomBytes(32).toString('hex');
 };
+
+export const generateDevToken = (): string => {
+    if (process.env.NODE_ENV !== 'development') {
+        throw new Error('Dev tokens only available in development');
+    }
+
+    return generateToken({
+        userId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', // Dev user ID
+        email: 'dev@vendro.app',
+    });
+};

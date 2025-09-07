@@ -1,4 +1,4 @@
-// src/entities/UserProfile.ts - Complete version with both phases
+// src/entities/UserProfile.ts - FIX TRANSFORMER
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, OneToMany, JoinColumn } from 'typeorm';
 import { User } from './User';
 import { SpotReview } from './SpotReview';
@@ -23,22 +23,32 @@ export class UserProfile {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
 
-    @Column()
+    @Column('uuid')
     user_id!: string;
-
-    // PHASE 1: Trust & Credibility
+    // FIX: Improved transformer with proper null/undefined handling
     @Column({
         type: 'simple-array',
         transformer: {
-            to: (value: TransportMode[]) => value.join(','),
-            from: (value: string) => value ? value.split(',') as TransportMode[] : []
+            to: (value: TransportMode[]) => {
+                if (!value || !Array.isArray(value)) {
+                    return 'hitchhiking'; // Default value
+                }
+                return value.join(',');
+            },
+            from: (value: string | null | undefined) => {
+                if (!value || typeof value !== 'string') {
+                    return [TransportMode.HITCHHIKING]; // Default array
+                }
+                return value.split(',') as TransportMode[];
+            }
         }
     })
     travel_modes!: TransportMode[];
 
     @Column({
         type: 'enum',
-        enum: TransportMode
+        enum: TransportMode,
+        default: TransportMode.HITCHHIKING
     })
     primary_mode!: TransportMode;
 
@@ -77,7 +87,7 @@ export class UserProfile {
     helpful_reviews!: number;
 
     @Column({ type: 'decimal', precision: 3, scale: 2, default: 0 })
-    reviewer_rating!: number; // 0-5 based on helpfulness of reviews
+    reviewer_rating!: number;
 
     @Column({ type: 'int', default: 0 })
     spots_added!: number;
@@ -85,15 +95,15 @@ export class UserProfile {
     @Column({ type: 'int', default: 0 })
     verified_spots!: number;
 
-    // PHASE 2: Personality & Gamification
+    // Phase 2: Personality & Gamification
     @Column({ type: 'text', nullable: true })
     bio!: string;
 
-    @Column({ type: 'text', array: true, default: [] })
-    languages!: string[]; // ['en', 'es', 'fr']
+    @Column({ type: 'text', array: true, default: () => "'{en}'" })
+    languages!: string[];
 
-    @Column({ type: 'text', array: true, default: [] })
-    countries_visited!: string[]; // ['US', 'ES', 'FR']
+    @Column({ type: 'text', array: true, default: () => "'{}'" })
+    countries_visited!: string[];
 
     // Settings
     @Column({ default: false })
@@ -123,9 +133,9 @@ export class UserProfile {
     @OneToMany(() => SpotReview, review => review.user)
     reviews!: SpotReview[];
 
-    @OneToMany('UserBadge', 'user_profile')  // Changed to strings
+    @OneToMany(() => UserBadge, badge => badge.user_profile)
     badges!: UserBadge[];
 
-    @OneToMany('TrustVerification', 'user_profile')  // Changed to strings
+    @OneToMany(() => TrustVerification, verification => verification.user_profile)
     verifications!: TrustVerification[];
 }

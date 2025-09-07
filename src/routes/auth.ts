@@ -25,7 +25,25 @@ router.post('/magic-link', async (req: Request, res: Response, next: NextFunctio
         next(error);
     }
 });
+router.post('/dev-login', async (req: Request, res: Response, next: NextFunction) => {
+    if (process.env.NODE_ENV !== 'development') {
+        return next(createError('Development endpoints not available in production', 404));
+    }
 
+    try {
+        const { email } = req.body;
+        const devEmail = email || 'dev@vendro.app';
+
+        const result = await authService.loginDevUser(devEmail);
+
+        res.json({
+            data: result,
+            message: result.message
+        });
+    } catch (error) {
+        next(error);
+    }
+});
 // POST /api/v1/auth/verify - Verify magic link and get JWT
 router.post('/verify', async (req: Request, res: Response, next: NextFunction) => {
     try {
