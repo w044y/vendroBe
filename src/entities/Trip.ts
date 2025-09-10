@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { User } from './User';
 import { TripSpot } from './TripSpot';
+import { RealityEntry, DailyUpdate, ExperienceSummary } from '../types/tripTypes';
 
 export enum TripStatus {
     PLANNED = 'planned',
@@ -18,6 +19,19 @@ export enum TripStatus {
     PAUSED = 'paused',
     COMPLETED = 'completed',
     CANCELLED = 'cancelled'
+}
+export enum TripPrivacyLevel {
+    PRIVATE_DRAFT = 'private_draft',
+    SHARED_WITH_FRIENDS = 'shared_with_friends',
+    COMMUNITY_PREVIEW = 'community_preview',
+    PUBLIC_BLUEPRINT = 'public_blueprint'
+}
+
+// NEW: Add trip phases
+export enum TripPhase {
+    PLANNING = 'planning',
+    LIVE = 'live',
+    COMPLETED = 'completed'
 }
 
 @Entity('trips')
@@ -29,30 +43,33 @@ export class Trip {
     title!: string;
 
     @Column({type: 'text', nullable: true})
-    description!: string;
+    description!: string | null;
+
 
     @Column({
         type: 'geography',
         spatialFeatureType: 'Point',
         srid: 4326,
+        nullable: true  // ADD nullable: true
     })
-    start_location!: Point;
+    start_location!: Point | null;
 
     @Column({
         type: 'geography',
         spatialFeatureType: 'Point',
         srid: 4326,
+        nullable: true  // ADD nullable: true
     })
-    end_location!: Point;
+    end_location!: Point | null;
 
-    @Column()
-    start_address!: string;
+    @Column({ nullable: true })  // ADD nullable: true
+    start_address!: string | null;
 
-    @Column()
-    end_address!: string;
+    @Column({ nullable: true })  // ADD nullable: true
+    end_address!: string | null;
 
     @Column({nullable: true})
-    planned_start_date!: Date;
+    planned_start_date!: Date | null;
 
     @Column({nullable: true})
     actual_start_date!: Date;
@@ -74,7 +91,7 @@ export class Trip {
     is_public!: boolean;
 
     @Column({type: 'decimal', precision: 10, scale: 2, nullable: true})
-    estimated_distance!: number;
+    estimated_distance!: number | null;
 
     @Column({type: 'decimal', precision: 10, scale: 2, nullable: true})
     actual_distance!: number;
@@ -129,4 +146,95 @@ export class Trip {
 
     @OneToMany(() => TripSpot, tripSpot => tripSpot.trip)
     trip_spots!: TripSpot[];
+    @Column({
+        type: 'enum',
+        enum: TripPrivacyLevel,
+        default: TripPrivacyLevel.PRIVATE_DRAFT
+    })
+    privacy_level!: TripPrivacyLevel;
+
+    @Column({
+        type: 'enum',
+        enum: TripPhase,
+        default: TripPhase.PLANNING
+    })
+    phase!: TripPhase;
+
+    @Column({ type: 'text', nullable: true })
+    intention_notes!: string | null;
+
+    @Column({ type: 'json', default: [] })
+    research_notes!: string[];
+
+    @Column({ type: 'text', array: true, default: [] })
+    dream_spots!: string[];
+
+    @Column({ type: 'text', array: true, default: [] })
+    confirmed_spots!: string[];
+
+    @Column({ type: 'json', default: [] })
+    reality_tracking!: RealityEntry[];
+
+    @Column({ type: 'json', default: [] })
+    daily_updates!: DailyUpdate[];
+
+    @Column({ type: 'json', nullable: true })
+    experience_summary!: ExperienceSummary;
+
+    @Column({ nullable: true })
+    forked_from!: string;
+
+    @Column({ default: 0 })
+    fork_count!: number;
+
+    @Column({ default: 0 })
+    view_count!: number;
+
+    @Column({ default: 0 })
+    helpful_votes!: number;
+}
+
+// New entities for social features
+@Entity('trip_collaborators')
+export class TripCollaborator {
+    @PrimaryGeneratedColumn('uuid')
+    id!: string;
+
+    @Column()
+    trip_id!: string;
+
+    @Column()
+    user_id!: string;
+
+    @Column({
+        type: 'enum',
+        enum: ['owner', 'editor', 'viewer'],
+        default: 'viewer'
+    })
+    role!: string;
+
+    @Column({ default: true })
+    can_add_photos!: boolean;
+
+    @Column({ default: false })
+    can_edit_route!: boolean;
+}
+
+@Entity('trip_forks')
+export class TripFork {
+    @PrimaryGeneratedColumn('uuid')
+    id!: string;
+
+    @Column()
+    original_trip_id!: string;
+
+    @Column()
+    forked_trip_id!: string;
+
+    @Column()
+    forked_by_user_id!: string;
+
+    @CreateDateColumn()
+    forked_at!: Date;
+
 }
